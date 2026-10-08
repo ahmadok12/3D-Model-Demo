@@ -4,7 +4,8 @@ An interactive 3D viewer for the `pixellabs-robot-3332` model, built with three.
 
 ## Features
 - Free orbit, zoom and pan (drag, scroll, right-drag)
-- 10 tagged robot parts with numbered pins and a details panel
+- 10 tagged robot parts with name labels and leader lines that follow the model as you orbit
+- Labels fade when a part turns away or is hidden behind another part, dim while you drag, and can be switched off
 - Three view modes: painted finish, line drawing and X-ray
 - Cross-section with an adjustable cut
 - Snapshots of the current view

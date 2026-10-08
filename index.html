@@ -94,11 +94,21 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
 .toolbar button[aria-pressed="true"]{color:var(--sage);background:var(--sage-soft)}
 .toolbar svg,.snapbtn svg{width:15px;height:15px;flex:none}
 .snapbtn{position:absolute;right:16px;bottom:16px;z-index:3;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
-.pins{position:absolute;inset:0;pointer-events:none;z-index:1}
-.pin{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid var(--panel);background:var(--ink);color:var(--panel);font:600 11px/20px var(--f-ui);text-align:center;pointer-events:auto;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:opacity .2s,background .2s;font-variant-numeric:tabular-nums;padding:0}
-.pin.on{background:var(--sage);transform-origin:center;box-shadow:0 0 0 5px color-mix(in srgb,var(--sage) 30%,transparent)}
-.pin.away{opacity:.18}
-.pins.hide .pin{opacity:0;pointer-events:none}
+.labels{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.labels svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.labels line,.labels polyline{fill:none;stroke:var(--ink);stroke-width:1.1;vector-effect:non-scaling-stroke}
+.labels polyline.hid{stroke-dasharray:3 3}
+.labels circle{fill:var(--ink);stroke:var(--panel);stroke-width:1.5}
+.labels circle.on{fill:var(--sage)}
+.labels polyline.on{stroke:var(--sage);stroke-width:1.6}
+.lab{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:3px 9px 3px 4px;border-radius:999px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 86%,transparent);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);font:600 15px/1.15 var(--f-display);color:var(--ink);pointer-events:auto;cursor:pointer;will-change:transform,opacity;box-shadow:0 2px 8px -4px rgba(0,0,0,.25)}
+.lab b{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--panel);font:600 10px/1 var(--f-ui);font-variant-numeric:tabular-nums}
+.lab.on{border-color:var(--sage);background:color-mix(in srgb,var(--sage-soft) 92%,transparent)}
+.lab.on b{background:var(--sage)}
+.lab.ghost{pointer-events:none}
+.labels.off{display:none}
+.note{transition:opacity .5s}
+.note.gone{opacity:0}
 .loader{position:absolute;inset:0;display:grid;place-items:center;z-index:5;background:color-mix(in srgb,var(--panel) 80%,transparent);font:500 24px/1.2 var(--f-script);color:var(--muted);text-align:center;padding:16px}
 .loader small{display:block;font:12px/1.4 var(--f-ui);margin-top:6px}
 
@@ -166,6 +176,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
   .note{display:none}
   .modes{width:auto;right:10px;top:10px;padding:8px}
   .modes .eyebrow,.modes .cutrow{display:none}
+  .lab{font-size:13px}
   .seg button{width:38px;height:36px}
   .stagetitle{left:16px;top:14px}
   .toolbar{left:10px;right:10px;bottom:10px;justify-content:space-between}
@@ -204,7 +215,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
         <div class="viewport" id="viewport">
           <div class="stagetitle"><h2>Unit 3332</h2><p>Riveted utility robot</p></div>
           <div class="note">Drag to orbit<br>Scroll to zoom<br>Right-drag to pan</div>
-          <div class="pins" id="pins"></div>
+          <div class="labels" id="labels"><svg id="labSvg" aria-hidden="true"></svg></div>
           <div class="modes">
             <p class="eyebrow">View mode</p>
             <div class="seg" role="group" aria-label="View mode">
@@ -212,6 +223,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
               <button id="m-line" aria-pressed="false" title="Line drawing" aria-label="Line drawing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 4 8 4-8 4-8-4z"/><path d="m4 12 8 4 8-4M4 16l8 4 8-4"/></svg></button>
               <button id="m-xray" aria-pressed="false" title="X-ray" aria-label="X-ray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg></button>
             </div>
+            <div class="row">Labels <button class="switch" id="labSw" role="switch" aria-checked="true" aria-label="Show part labels"></button></div>
             <div class="row">Cross-section <button class="switch" id="cutSw" role="switch" aria-checked="false" aria-label="Cross-section"></button></div>
             <div class="cutrow"><input class="cut" id="cutPos" type="range" min="-0.35" max="0.35" step="0.005" value="0.08" disabled aria-label="Cut position"></div>
           </div>
@@ -301,19 +313,20 @@ const WEAR=['Rust','Paint loss','Grime'];
 
 /* ---------- DOM ---------- */
 const $=id=>document.getElementById(id);
-const vp=$('viewport'),pinsEl=$('pins');
+const vp=$('viewport'),labelsEl=$('labels'),labSvg=$('labSvg');const SVGNS='http://www.w3.org/2000/svg';
 const fmt=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+String(s).padStart(2,'0')};
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const partsEl=$('parts');
 PARTS.forEach((p,i)=>{const li=document.createElement('li');li.innerHTML=`<button class="part" data-i="${i}"><span class="num">${i+1}</span><span><span class="nm">${p.n}</span><span class="sub">${p.s}</span></span></button>`;partsEl.appendChild(li);
-  const pin=document.createElement('button');pin.className='pin';pin.textContent=i+1;pin.setAttribute('aria-label',p.n);pin.dataset.i=i;pin.style.opacity=0;pinsEl.appendChild(pin);p.pin=pin;});
+  const lab=document.createElement('button');lab.className='lab';lab.dataset.i=i;lab.innerHTML=`<b>${i+1}</b>${p.n}`;lab.style.opacity=0;labelsEl.appendChild(lab);p.lab=lab;
+  p.line=document.createElementNS(SVGNS,'polyline');p.dot=document.createElementNS(SVGNS,'circle');p.dot.setAttribute('r',3.5);labSvg.append(p.line,p.dot);p.op=0;p.vis=1;});
 
 
 let sel=0;
 function selectPart(i,focus){sel=i;const p=PARTS[i];
   document.querySelectorAll('.part').forEach(b=>b.setAttribute('aria-current',+b.dataset.i===i?'true':'false'));
-  PARTS.forEach((q,j)=>q.pin.classList.toggle('on',j===i));
+  PARTS.forEach((q,j)=>{q.lab.classList.toggle('on',j===i);q.line.classList.toggle('on',j===i);q.dot.classList.toggle('on',j===i)});
   $('dNum').textContent=i+1;$('dName').textContent=p.n;$('dSub').textContent=p.s;
   $('dFacts').innerHTML=Object.entries(p.f).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
   $('dNote').textContent=p.note;$('dFun').textContent=p.fun;
@@ -322,7 +335,7 @@ function selectPart(i,focus){sel=i;const p=PARTS[i];
 }
 selectPart(0,false);
 partsEl.addEventListener('click',e=>{const b=e.target.closest('.part');if(b)selectPart(+b.dataset.i,true)});
-pinsEl.addEventListener('click',e=>{const b=e.target.closest('.pin');if(b)selectPart(+b.dataset.i,true)});
+labelsEl.addEventListener('click',e=>{const b=e.target.closest('.lab');if(b)selectPart(+b.dataset.i,true)});
 
 /* ---------- three ---------- */
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -459,7 +472,10 @@ function focusPart(i){const p=PARTS[i];if(!p.anchor)return;
 $('t-focus').onclick=()=>focusPart(sel);
 $('t-reset').onclick=()=>flyTo(HOME.pos,HOME.tgt,1);
 $('t-rot').onclick=()=>{controls.autoRotate=!controls.autoRotate;$('t-rot').setAttribute('aria-pressed',controls.autoRotate)};
-$('t-pins').onclick=()=>{const on=pinsEl.classList.toggle('hide');$('t-pins').setAttribute('aria-pressed',!on)};
+let labelsOn=true;
+function setLabels(v){labelsOn=v;labelsEl.classList.toggle('off',!v);$('t-pins').setAttribute('aria-pressed',v);$('labSw').setAttribute('aria-checked',v);}
+$('t-pins').onclick=()=>setLabels(!labelsOn);$('labSw').onclick=()=>setLabels(!labelsOn);
+let dragging=false;controls.addEventListener('start',()=>{dragging=true;document.querySelector('.note').classList.add('gone')});controls.addEventListener('end',()=>{dragging=false});
 
 /* ---------- animation ---------- */
 const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
@@ -491,6 +507,64 @@ addEventListener('keydown',e=>{if(e.key==='Escape')$('lb').hidden=true});
 function resize(){const w=vp.clientWidth,h=vp.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;
   camera.fov=w<600?38:30;camera.updateProjectionMatrix();}
 new ResizeObserver(resize).observe(vp);resize();
+const occ=new THREE.Raycaster();let frame=0;const bounds={L:110,R:190,B:600};
+setTimeout(()=>document.querySelector('.note').classList.add('gone'),7000);
+const cW=new THREE.Vector3(),rW=new THREE.Vector3();
+function layoutLabels(dt){
+  const w=vp.clientWidth,h=vp.clientHeight,narrow=w<600;frame++;
+  // robot centre and on-screen radius
+  pivot.localToWorld(cW.set(0,.5,0));rW.setFromMatrixColumn(camera.matrixWorld,0).multiplyScalar(.42).add(cW);
+  cW.project(camera);rW.project(camera);
+  const cx=(cW.x*.5+.5)*w,R=Math.max(50,Math.abs(rW.x-cW.x)*.5*w);
+  const doOcc=frame%5===0;
+  const sides={L:[],R:[]};
+  PARTS.forEach((p,k)=>{
+    p.anchor.getWorldPosition(v);const wz=v.z;
+    nW.copy(p.n0).transformDirection(model.matrixWorld);toCam.copy(camera.position).sub(v);const dist=toCam.length();toCam.divideScalar(dist);
+    const facing=nW.dot(toCam);
+    if(doOcc){occ.set(camera.position,toCam.clone().negate());occ.far=dist-.015;p.occluded=mode!=='xray'&&occ.intersectObject(mesh,false).length>0;}
+    const cutAway=cutOn&&wz>clip.constant+.01;
+    let vis=cutAway?0:(facing>-.1&&!p.occluded?1:0);
+    // target opacity: visible parts full, hidden ones a faint ghost; selection stays readable
+    let target=vis?1:.14;
+    if(k===sel)target=Math.max(target,.55);
+    else if(narrow)target=0;
+    if(cutAway)target=0;
+    if(dragging&&k!==sel)target*=.4;
+    p.op+=(target-p.op)*Math.min(1,dt*9);p.vis=vis;
+    const dT=cutAway?0:(vis?.95:.18);p.dop=(p.dop||0)+(dT-(p.dop||0))*Math.min(1,dt*9);
+    v.project(camera);
+    p.ax=(v.x*.5+.5)*w;p.ay=(-v.y*.5+.5)*h;p.inFront=v.z<1;
+    if(!p.lw)p.lw=p.lab.offsetWidth||110;
+    (p.ax<cx?sides.L:sides.R).push(p);
+  });
+  // stack labels on each side so they never overlap
+  const gap=narrow?26:30;
+  if(frame%10===1){const vr=vp.getBoundingClientRect(),q=sel=>vp.querySelector(sel).getBoundingClientRect();
+    const note=vp.querySelector('.note');const noteOn=note&&!note.classList.contains('gone')&&getComputedStyle(note).display!=='none';
+    bounds.L=Math.max(q('.stagetitle').bottom,noteOn?q('.note').bottom:0)-vr.top+18;
+    bounds.R=q('.modes').bottom-vr.top+18;bounds.B=Math.min(q('.toolbar').top,q('.snapbtn').top)-vr.top-16;}
+  for(const key of ['L','R']){
+    const list=sides[key].sort((a,b)=>a.ay-b.ay);
+    const top=key==='L'?bounds.L:bounds.R,bot=bounds.B;
+    let y=-1e9;list.forEach(p=>{p.ly=Math.max(p.ay,y+gap,top);y=p.ly;});
+    y=1e9;for(let n=list.length-1;n>=0;n--){const p=list[n];p.ly=Math.min(p.ly,y-gap,bot);y=p.ly;}
+    list.forEach(p=>{
+      let edge;
+      if(key==='L'){edge=Math.max(8+p.lw,Math.min(cx-R-26,p.ax-30));p.lx=edge-p.lw;}
+      else{edge=Math.min(w-8-p.lw,Math.max(cx+R+26,p.ax+30));p.lx=edge;}
+      const ex=key==='L'?edge:edge,elbow=key==='L'?edge+12:edge-12;
+      p.line.setAttribute('points',`${p.ax.toFixed(1)},${p.ay.toFixed(1)} ${elbow.toFixed(1)},${p.ly.toFixed(1)} ${ex.toFixed(1)},${p.ly.toFixed(1)}`);
+    });
+  }
+  PARTS.forEach(p=>{
+    const o=p.inFront?p.op:0;
+    p.lab.style.transform=`translate(${p.lx.toFixed(1)}px,${(p.ly-12).toFixed(1)}px)`;
+    p.lab.style.opacity=o.toFixed(3);p.lab.classList.toggle('ghost',o<.3);
+    p.line.style.opacity=(o*.55).toFixed(3);p.line.classList.toggle('hid',!p.vis);
+    p.dot.setAttribute('cx',p.ax.toFixed(1));p.dot.setAttribute('cy',p.ay.toFixed(1));p.dot.style.opacity=(p.inFront?p.dop:0).toFixed(3);
+  });
+}
 const clock=new THREE.Clock();
 const v=new THREE.Vector3(),toCam=new THREE.Vector3(),nW=new THREE.Vector3();
 renderer.setAnimationLoop(()=>{
@@ -498,11 +572,7 @@ renderer.setAnimationLoop(()=>{
   if(tween){tween.k=Math.min(1,tween.k+dt/tween.d);const k=ease(tween.k);camera.position.lerpVectors(tween.p0,tween.p1,k);controls.target.lerpVectors(tween.t0,tween.t1,k);if(tween.k>=1)tween=null;}
   controls.update();
   renderer.render(scene,camera);
-  // pins
-  if(mesh){const w=vp.clientWidth,h=vp.clientHeight;
-    PARTS.forEach(p=>{p.anchor.getWorldPosition(v);const wz=v.z;nW.copy(p.n0).transformDirection(model.matrixWorld);toCam.copy(camera.position).sub(v).normalize();
-      const facing=nW.dot(toCam)>-.05;v.project(camera);
-      p.pin.style.transform=`translate(${(v.x*.5+.5)*w}px,${(-v.y*.5+.5)*h}px)`;p.pin.style.opacity='';p.pin.classList.toggle('away',!facing);p.pin.hidden=cutOn&&wz>clip.constant+.01;});}
+  if(mesh&&labelsOn)layoutLabels(dt);
 });
 </script>
 
