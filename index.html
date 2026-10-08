@@ -224,6 +224,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
               <button id="m-xray" aria-pressed="false" title="X-ray" aria-label="X-ray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg></button>
             </div>
             <div class="row">Labels <button class="switch" id="labSw" role="switch" aria-checked="true" aria-label="Show part labels"></button></div>
+            <div class="row">All labels <button class="switch" id="allSw" role="switch" aria-checked="false" aria-label="Show all part labels together"></button></div>
             <div class="row">Cross-section <button class="switch" id="cutSw" role="switch" aria-checked="false" aria-label="Cross-section"></button></div>
             <div class="cutrow"><input class="cut" id="cutPos" type="range" min="-0.35" max="0.35" step="0.005" value="0.08" disabled aria-label="Cut position"></div>
           </div>
@@ -231,6 +232,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px so
             <button id="t-rot" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg><span class="lbl">Orbit</span></button>
             <button id="t-focus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg><span class="lbl">Focus part</span></button>
             <button id="t-pins" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2"/></svg><span class="lbl">Labels</span></button>
+            <button id="t-all" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="8" height="5" rx="2.5"/><rect x="13" y="10" width="8" height="5" rx="2.5"/><rect x="3" y="16" width="8" height="5" rx="2.5"/></svg><span class="lbl">Show all</span></button>
             <button id="t-reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/></svg><span class="lbl">Reset view</span></button>
           </div>
           <button class="snapbtn" id="snap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Snapshot</button>
@@ -473,8 +475,11 @@ $('t-focus').onclick=()=>focusPart(sel);
 $('t-reset').onclick=()=>flyTo(HOME.pos,HOME.tgt,1);
 $('t-rot').onclick=()=>{controls.autoRotate=!controls.autoRotate;$('t-rot').setAttribute('aria-pressed',controls.autoRotate)};
 let labelsOn=true;
-function setLabels(v){labelsOn=v;labelsEl.classList.toggle('off',!v);$('t-pins').setAttribute('aria-pressed',v);$('labSw').setAttribute('aria-checked',v);}
+function setLabels(v){labelsOn=v;if(!v&&typeof allLabels!=='undefined'&&allLabels){allLabels=false;$('t-all').setAttribute('aria-pressed',false);$('allSw').setAttribute('aria-checked',false);}labelsEl.classList.toggle('off',!v);$('t-pins').setAttribute('aria-pressed',v);$('labSw').setAttribute('aria-checked',v);}
 $('t-pins').onclick=()=>setLabels(!labelsOn);$('labSw').onclick=()=>setLabels(!labelsOn);
+let allLabels=false;
+function setAllLabels(v){allLabels=v;if(v&&!labelsOn)setLabels(true);$('t-all').setAttribute('aria-pressed',v);$('allSw').setAttribute('aria-checked',v);}
+$('t-all').onclick=()=>setAllLabels(!allLabels);$('allSw').onclick=()=>setAllLabels(!allLabels);
 let dragging=false;controls.addEventListener('start',()=>{dragging=true;document.querySelector('.note').classList.add('gone')});controls.addEventListener('end',()=>{dragging=false});
 
 /* ---------- animation ---------- */
@@ -527,12 +532,13 @@ function layoutLabels(dt){
     let vis=cutAway?0:(facing>-.1&&!p.occluded?1:0);
     // target opacity: visible parts full, hidden ones a faint ghost; selection stays readable
     let target=vis?1:.14;
-    if(k===sel)target=Math.max(target,.55);
+    if(allLabels)target=1; // "Show all": every label fully readable, even parts behind the body
+    else if(k===sel)target=Math.max(target,.55);
     else if(narrow)target=0;
     if(cutAway)target=0;
-    if(dragging&&k!==sel)target*=.4;
+    if(dragging&&k!==sel&&!allLabels)target*=.4;
     p.op+=(target-p.op)*Math.min(1,dt*9);p.vis=vis;
-    const dT=cutAway?0:(vis?.95:.18);p.dop=(p.dop||0)+(dT-(p.dop||0))*Math.min(1,dt*9);
+    const dT=cutAway?0:(vis||allLabels?.95:.18);p.dop=(p.dop||0)+(dT-(p.dop||0))*Math.min(1,dt*9);
     v.project(camera);
     p.ax=(v.x*.5+.5)*w;p.ay=(-v.y*.5+.5)*h;p.inFront=v.z<1;
     if(!p.lw)p.lw=p.lab.offsetWidth||110;
